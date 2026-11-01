@@ -1,0 +1,59 @@
+name: Site iasemlimites.github.io
+
+# Vai buscar o conteúdo ao repositório público davidasoliveira/iasemlimites-media,
+# gera o site e publica-o em https://iasemlimites.github.io/ de 30 em 30 minutos.
+on:
+  schedule:
+    - cron: "5,35 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: davidasoliveira/iasemlimites-media
+          path: media
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pillow
+      - name: Gerar o site com o endereço curto
+        run: |
+          sed -i 's#^SITE_URL = .*#SITE_URL = "https://iasemlimites.github.io/"#' media/site/gerar.py
+          python3 media/site/gerar.py --saida _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  # O GitHub desliga tarefas agendadas em repositórios sem commits há 60 dias.
+  # Este registo mensal mantém o repositório ativo.
+  manter-ativo:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          if [ "$(date -u +%d%H)" = "0100" ]; then
+            date -u +%Y-%m-%d > ultima-atualizacao.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+            git add ultima-atualizacao.txt
+            git commit -m "Registo mensal" && git push || true
+          fi
